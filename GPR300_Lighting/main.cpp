@@ -156,10 +156,12 @@ public:
 	* Limitation of this implementation is that it messes with glSetActiveTexture
 	* by overwriting the active texture with the texture being created here.
 	*/
-	FrameBuffer(int width, int height)
+	FrameBuffer(int colorBuffers, int width, int height)
 	{
 		mWidth = width;
 		mHeight = height;
+		mTexturesLength = colorBuffers;
+		textures = new unsigned int[mTexturesLength];
 
 		// Create frame buffer object
 		glGenFramebuffers(1, &fbo);
@@ -167,16 +169,28 @@ public:
 		// Bind frame buffer to GL_FRAMEBUFFER target
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-		// Create texture color buffer
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		// Create texture color buffers
+		glGenTextures(mTexturesLength, textures);
 
-		// Attach the texture to the frame buffer in slot 0
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+		// Stores attachments to be passed into glDrawBuffers
+		// This implementation doesn't feel right
+		unsigned int* attachments = new unsigned int[mTexturesLength];
+
+		// Create textures for each generate color buffer
+		for (int i = 0; i < mTexturesLength; i++)
+		{
+			glBindTexture(GL_TEXTURE_2D, textures[i]);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glBindTexture(GL_TEXTURE_2D, 0);
+
+			// Attach the texture to the corresponding frame buffer slot
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, textures[i], 0);
+
+			// Add the attachment to the attachment array
+			attachments[i] = GL_COLOR_ATTACHMENT0 + i;
+		}
 
 		// Create render buffer object
 		glGenRenderbuffers(1, &rbo);
@@ -188,6 +202,12 @@ public:
 
 		// Attach render buffer object to the frame buffer
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
+
+		// Specify how many attachments are being used in drawing
+		glDrawBuffers(mTexturesLength, attachments);
+
+		// Deallocate attachments array
+		delete[] attachments;
 
 		// Check for completeness
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
@@ -205,25 +225,31 @@ public:
 	}
 
 	// Delete the frame buffer and its components
+	// Not sure if memory with textures is cleaned up properly.
 	~FrameBuffer()
 	{
 		glDeleteRenderbuffers(1, &rbo);
-		glDeleteTextures(1, &texture);
+		glDeleteTextures(mTexturesLength, textures);
 		glDeleteFramebuffers(1, &fbo);
+
+		delete[] textures;
+		textures = nullptr;
+		printf("Unloaded buffer.\n");
 	}
 
 	// Getter for the current frame buffer
 	unsigned int getFBO() { return fbo; }
 
 	// Gett for the buffer's texture
-	unsigned int getTexture() { return texture; }
+	unsigned int getTexture(int texNum) { return textures[texNum]; }
 
 private:
 	unsigned int fbo;
-	unsigned int texture;
+	unsigned int* textures;
 	unsigned int rbo;
 
 	int mWidth, mHeight;
+	int mTexturesLength;
 };
 
 int main() {
@@ -267,7 +293,8 @@ int main() {
 	// Used to draw post processing effects
 	Shader postProc("shaders/postProcessing.vert", "shaders/postProcessing.frag");
 
-	FrameBuffer screenBuffer = FrameBuffer(SCREEN_WIDTH, SCREEN_HEIGHT);
+	// Create frame buffer instance with two frame buffers
+	FrameBuffer screenBuffer = FrameBuffer(2, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 	ew::MeshData cubeMeshData;
 	ew::createCube(1.0f, 1.0f, 1.0f, cubeMeshData);
@@ -480,7 +507,7 @@ int main() {
 
 		// Bind screen buffer's texture to the shader's texture
 		glActiveTexture(GL_TEXTURE4);
-		glBindTexture(GL_TEXTURE_2D, screenBuffer.getTexture());
+		glBindTexture(GL_TEXTURE_2D, screenBuffer.getTexture(1));
 		postProc.setInt("_Texture1", 4);
 
 		// Draw screen quad
