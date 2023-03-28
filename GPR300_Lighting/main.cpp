@@ -302,19 +302,12 @@ int main() {
 	ew::createSphere(0.5f, 64, sphereMeshData);
 	ew::MeshData cylinderMeshData;
 	ew::createCylinder(1.0f, 0.5f, 64, cylinderMeshData);
-	/*
-	ew::MeshData planeMeshData;
-	ew::createPlane(1.0f, 1.0f, planeMeshData);
-	*/
+	ew::MeshData quadMeshData;
+	ew::createQuad(2.0f, 2.0f, quadMeshData);
 
 	ew::Mesh cubeMesh(&cubeMeshData);
 	ew::Mesh sphereMesh(&sphereMeshData);
-	//ew::Mesh planeMesh(&planeMeshData);
 	ew::Mesh cylinderMesh(&cylinderMeshData);
-	
-
-	ew::MeshData quadMeshData;
-	ew::createQuad(2.0f, 2.0f, quadMeshData);
 	ew::Mesh quadMesh(&quadMeshData);
 
 	//Enable back face culling
@@ -358,13 +351,16 @@ int main() {
 
 	numPointLights = 1;
 	pointLightOrbitCenter = glm::vec3(0, 5, 0);
-	pointLightOrbitSpeed = 5;
+	pointLightOrbitSpeed = 1;
 	pointLightOrbitRange = 10;
 	_PointLight.light.color = glm::vec3(1, 1, 1);
 	_PointLight.light.intensity = 1;
 	_PointLight.constK = 1;
 	_PointLight.linearK = 1;
 	_PointLight.quadraticK = 0.5;
+
+	const char* effectNames[5] = { "None", "Invert", "Red Overlay", "Zooming Out", "Wave"};
+	int effectIndex = 0;
 
 	GLuint brickTexture = getTexture("Bricks.jpg");
 	GLuint tileTexture = getTexture("Tiles.jpg");
@@ -507,8 +503,11 @@ int main() {
 
 		// Bind screen buffer's texture to the shader's texture
 		glActiveTexture(GL_TEXTURE4);
-		glBindTexture(GL_TEXTURE_2D, screenBuffer.getTexture(1));
+		glBindTexture(GL_TEXTURE_2D, screenBuffer.getTexture(0));
 		postProc.setInt("_Texture1", 4);
+
+		postProc.setInt("effectIndex", effectIndex);
+		postProc.setFloat("time", time);
 
 		// Draw screen quad
 		quadMesh.draw();
@@ -564,6 +563,11 @@ int main() {
 		ImGui::DragFloat("Scale X", &scalingX, 1, 1, 5);
 		ImGui::DragFloat("Scale Y", &scalingY, 1, 1, 5);
 		ImGui::DragFloat("Normal Intensity", &normalIntensity, 0.1, 0, 1);
+		ImGui::End();
+
+		ImGui::Begin("Post Processing");
+
+		ImGui::Combo("Effects", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
 		ImGui::End();
 
 		ImGui::Render();
